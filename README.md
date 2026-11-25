@@ -57,6 +57,6 @@ python3 scripts/build.py
 python3 -m http.server 8000 --directory dist
 ```
 
-No application dependencies or network access are needed to build. `dist/` is generated and untracked. For browser tests, install `tests/browser-requirements.txt`, then run `CHROMIUM_PATH=/path/to/google-chrome python3 tests/browser_smoke.py`; CI uses Ubuntu 24.04’s installed Google Chrome. Fixtures exercise the real gateway response shape without consuming provider quota.
+The builder versions local scripts, module imports, configuration and CSS with one content hash, so a normal refresh loads a consistent release even when the browser retains older assets. No application dependencies or network access are needed to build. `dist/` is generated and untracked. For browser tests, install `tests/browser-requirements.txt`, then run `CHROMIUM_PATH=/path/to/google-chrome python3 tests/browser_smoke.py`; CI uses Ubuntu 24.04’s installed Google Chrome. Fixtures exercise the real gateway response shape without consuming provider quota.
 
 Set repository **Settings → Pages → Source → GitHub Actions**. A successful main run publishes the project path; no CNAME is needed. Deploying the frontend and configuring the protected gateway are separate steps. Live API readiness must be checked after the Worker and secret bindings are deployed.

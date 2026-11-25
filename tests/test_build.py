@@ -30,9 +30,28 @@ class BuildTests(unittest.TestCase):
         self.assertIn('&lt;img', page)
         self.assertNotIn('<img', page)
         self.assertNotIn('{{', page)
-        self.assertIn('href="./style.css"', page)
+        self.assertRegex(page, r'href="\./style\.css\?v=[a-f0-9]{16}"')
         self.assertFalse((self.root / "dist/private.txt").exists())
         self.assertTrue((self.root / "dist/.nojekyll").exists())
+
+    def test_local_assets_share_a_stable_version_that_changes_with_content(self):
+        import re
+        build(self.root)
+        page = (self.root / "dist/index.html").read_text()
+        version = re.search(r'app\.mjs\?v=([a-f0-9]{16})', page).group(1)
+        app = (self.root / "dist/app.mjs").read_text()
+        storage = (self.root / "dist/storage.mjs").read_text()
+        self.assertIn(f"'./model.mjs?v={version}'", app)
+        self.assertIn(f"'./storage.mjs?v={version}'", app)
+        self.assertIn(f"'./config.json?v={version}'", app)
+        self.assertIn(f"'./model.mjs?v={version}'", storage)
+        build(self.root)
+        self.assertEqual((self.root / "dist/index.html").read_text(), page)
+        model = self.root / "web/model.mjs"
+        model.write_text(model.read_text() + "\n// Changed module content\n")
+        build(self.root)
+        changed = (self.root / "dist/index.html").read_text()
+        self.assertNotIn(f"app.mjs?v={version}", changed)
 
     def test_reporting_is_scoped_to_initialized_coolcode_tools(self):
         for owner, slug, enabled in [
