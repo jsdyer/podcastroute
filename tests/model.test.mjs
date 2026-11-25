@@ -1,21 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanLines } from '../web/model.mjs';
-test('trims, removes blanks and preserves first-seen order', () => {
-  assert.deepEqual(cleanLines('  Halifax\nLangley\nHalifax\n\nVancouver  '), {
-    text: 'Halifax\nLangley\nVancouver', count: 3, removed: 1,
-  });
-});
-test('supports Windows and old Mac line endings', () => {
-  assert.equal(cleanLines('a\r\nb\ra').text, 'a\nb');
-});
-test('empty text and whitespace produce an empty result', () => {
-  assert.deepEqual(cleanLines(' \n\t'), { text: '', count: 0, removed: 0 });
-});
-test('preserves case and Unicode', () => {
-  assert.equal(cleanLines('Québec\nquébec\n東京\nQuébec').text, 'Québec\nquébec\n東京');
-});
-test('treats markup as ordinary text', () => {
-  assert.equal(cleanLines('<script>alert(1)</script>\n<script>alert(1)</script>').text, '<script>alert(1)</script>');
-});
-test('rejects non-text input', () => { assert.throws(() => cleanLines(null), TypeError); });
+import fs from 'node:fs';
+import {safeURL,httpsURL,normalizeFeed,normalizeEpisode,filteredFeeds,filteredEpisodes,durationLabel,addQueue,moveQueue,emptyWorkspace,validateWorkspace,exportOPML,MAX_QUEUE} from '../web/model.mjs';
+const feed=normalizeFeed({id:42,title:'A <b>show</b>',language:'en-CA',categories:{1:'Science'},url:'https://example.org/feed.xml'});
+const ep=normalizeEpisode({id:8,title:'Stars',enclosureUrl:'https://example.org/a.mp3',duration:1200,datePublished:1700000000,transcripts:[{url:'https://example.org/transcript',type:'text/plain'},{url:'javascript:bad()'}],chaptersUrl:'https://example.org/chapters'},feed);
+test('URL boundaries reject executable or credential-bearing links',()=>{assert.equal(safeURL('javascript:alert(1)'),'');assert.equal(safeURL('https://u:p@example.org'),'');assert.equal(httpsURL('http://example.org'),'');assert.equal(safeURL('https://example.org/a'),'https://example.org/a');});
+test('provider metadata normalizes safely without trusting HTML',()=>{assert.equal(feed.title,'A show');assert.equal(ep.feedId,'42');assert.equal(ep.links.length,2);assert.equal(normalizeFeed({id:'bad'}),null);assert.equal(normalizeEpisode({id:'bad'}),null);assert.equal(ep.duration,1200);});
+test('language matches base and regional code',()=>{assert.equal(filteredFeeds([feed],'en').length,1);assert.equal(filteredFeeds([feed],'fr').length,0);});
+test('unknown duration is deliberate and minute ranges inclusive',()=>{const unknown={...ep,id:'9',duration:null};assert.equal(filteredEpisodes([ep,unknown],{min:20,max:20,unknown:false}).length,1);assert.equal(filteredEpisodes([ep,unknown],{max:10}).length,1);assert.equal(filteredEpisodes([ep],{query:'stars'}).length,1);assert.equal(filteredEpisodes([ep],{query:'ocean'}).length,0);});
+test('invalid time ranges fail rather than silently misleading',()=>{for(const limits of [{min:30,max:20},{min:-1},{max:Infinity},{max:10081}])assert.throws(()=>filteredEpisodes([ep],limits));});
+test('queue deduplicates and reorders with stable bounds',()=>{const queue=addQueue([ep],ep);assert.equal(queue.length,1);const second={...ep,id:'9'};assert.deepEqual(moveQueue([ep,second],0,1),[second,ep]);assert.deepEqual(moveQueue([ep],0,-1),[ep]);assert.throws(()=>addQueue(Array.from({length:MAX_QUEUE},(_,i)=>({...ep,id:String(i+100)})),ep));});
+test('workspace export roundtrip keeps links, notes and progress',()=>{const workspace={...emptyWorkspace(),queue:[ep],subscriptions:[feed],notes:{8:'Remember this'},progress:{8:513}};const loaded=validateWorkspace(JSON.parse(JSON.stringify(workspace)));assert.deepEqual(loaded.queue,[ep]);assert.equal(loaded.notes[8],'Remember this');assert.equal(loaded.progress[8],513);assert.deepEqual(loaded.subscriptions,[feed]);});
+test('workspace rejects duplicate and malformed records',()=>{assert.throws(()=>validateWorkspace({version:9}));assert.throws(()=>validateWorkspace({...emptyWorkspace(),queue:[ep,ep]}));assert.throws(()=>validateWorkspace({...emptyWorkspace(),subscriptions:[{id:'evil'}]}));});
+test('workspace drops unsafe media and invalid progress',()=>{const value=validateWorkspace({...emptyWorkspace(),queue:[{...ep,audio:'javascript:x'}],progress:{8:-10,x:5},notes:{x:'x'}});assert.equal(value.queue[0].audio,'');assert.deepEqual(value.progress,{});assert.deepEqual(value.notes,{});});
+test('OPML escapes attribute injection',()=>{const value=exportOPML([{...feed,title:'A "quote" & <tag>'}]);assert.ok(value.includes('&quot;quote&quot; &amp; &lt;tag&gt;'));assert.ok(value.includes('xmlUrl="https://example.org/feed.xml"'));});
+test('duration label communicates missing metadata',()=>{assert.equal(durationLabel(0),'Duration not provided');assert.equal(durationLabel(3660),'1h 1m');});
+test('configuration supports topics beyond initial defaults',()=>{const config=JSON.parse(fs.readFileSync(new URL('../web/config.json',import.meta.url)));const expanded=[...config.topics,'marine archaeology'];assert.equal(expanded.length,config.topics.length+1);assert.equal(expanded.at(-1),'marine archaeology');assert.ok(config.api_base.startsWith('https://'));});

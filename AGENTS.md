@@ -2,8 +2,8 @@
 
 - Keep app source in `web/`, build code in `scripts/`, and meaningful tests in `tests/`.
   Never commit `dist/`. Do not add dependencies without a concrete application need.
-- Run `scripts/init.py` as documented in README, then replace the example UI,
-  behaviour, tests and privacy text. Review all fields in `tool.json`.
+- This application is initialized. Maintain the listening workflow and update its
+  browser/model tests, privacy explanation and `tool.json` when behavior changes.
 - Build for expandable personal use: keep watchlists, preset queries, source
   selections and tunable limits in a documented configuration file. Defaults are
   starting points; accept arbitrary valid visitor input when the source permits it.

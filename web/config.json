@@ -1,0 +1,5 @@
+{
+  "api_base": "https://coolcode-visitor-api.jeffdyer.workers.dev",
+  "topics": ["Canadian history", "science", "Linux", "cybersecurity", "British Columbia", "Nova Scotia"],
+  "episode_limit": 100
+}

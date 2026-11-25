@@ -1,47 +1,50 @@
-# CoolCode browser tool template
+# Podcast Route
 
-A starting point for independent tools at `coolcode.ca/<repo>/`: a working local-text
-example, responsive UI, Python standard-library build, Node tests, PR checks and Pages
-publication. No npm install is needed.
-
-## Using the example
+Find podcasts by any subject, show or presenter, choose episodes by listening time, and keep a private listening queue. Use [Podcast Route](https://coolcode.ca/podcastroute/).
 
 <!-- coolcode:guide -->
-The first occurrence of each trimmed line keeps its place. Compare the output with the original text before copying the result.
+Search a subject or open an indexed RSS feed, then explore a show and filter its latest 100 indexed episodes by keywords, language at show level, and duration. Unknown durations are explicitly included or excluded. Follow shows, import/export subscriptions as OPML, and save a queue with notes and listening positions on your device; publisher audio and available chapter/transcript links remain on their original hosts.
 <!-- /coolcode:guide -->
 
-For a real tool, replace this paragraph with one or two plain-text sentences
-about an example, a limit or how to interpret the results. Keep the source,
-coverage, refresh behaviour and a worked example in this README as appropriate.
-When updating a tool, revise any details its behaviour has changed and keep the
-homepage's shorter data-source sentence in `tool.json` accurate.
-The hub imports the marked note into the catalogue README.
+## Use it
 
-## One-time template setup
+1. Search a topic such as “Canadian history” or a specific podcast title. The language field filters loaded directory matches (for example `en`, `en-CA` or `fr`).
+2. Open a show. Try a maximum duration of 30 minutes. Missing durations are kept only when the checkbox is selected. This filters the loaded episodes, not every episode ever published.
+3. Queue episodes or listen directly. Audio needs HTTPS and is supplied by the publisher; availability, seeking and browser playback vary. Resume restores the position captured when the episode was opened. Chapters and transcripts appear only when Podcast Index supplies publisher links.
+4. Follow shows. Following is a directory reference, not a background subscription or automatic download. Opening a show requests current indexed episodes.
+5. Choose “Remember this workspace” to persist locally. Otherwise changes live only in the current tab. Export a JSON backup before clearing browser data. Importing a workspace replaces its queue, subscriptions, notes and positions. OPML adds resolved subscriptions and retains existing ones; import at most 50 feed URLs per file.
 
-Enable **Settings → General → Template repository** here. This repository does not
-need Pages enabled: its workflow builds/tests but intentionally skips deployment.
-New copies also skip deployment until `scripts/init.py` sets the tool ID to match
-their repository name. This lets you create the repo before configuring Pages.
+## Sources and coverage
 
-## Start a new tool
+[Podcast Index](https://podcastindex.org/) provides directory and episode metadata through a protected CoolCode gateway. No catalogue is bundled or presented as comprehensive. Directory matches and up to 100 recent indexed episodes are fetched on demand. Search matching and feed coverage depend on Podcast Index; older episodes may be available from the publisher. The visible checked time records gateway retrieval, not a publisher update. No scheduled collection, background syncing, audio download or automatic refresh is used.
 
-1. Select **Use this template → Create a new repository**, choose owner `jsdyer`,
-   a unique lowercase name such as `my-tool`, and public visibility.
-2. Clone the new repository. Use Python 3.12+ and Node 24+.
-3. Set the identity, using a slug that matches the repository name:
+Audio and images come from publisher hosts. Descriptions are rendered as plain text; executable publisher HTML is never injected. Saved queue items are a user-selected snapshot; open a show to request current metadata.
 
-```sh
-python3 scripts/init.py my-tool --title "My Tool" --description "Describe what this tool does."
-```
+## API keys and configuration
 
-Review the category, tags and icon in `tool.json`. `access: "browser"` tells the main
-catalogue that the tool works immediately without installation. `--owner` supports a different
-GitHub owner, but only projects owned by `jsdyer` inherit the CoolCode domain.
+**Do not put API keys in this repository, `web/`, GitHub Pages variables or public build artifacts.** The browser calls the public `api_base` in `web/config.json`, initially `https://coolcode-visitor-api.jeffdyer.workers.dev`. Its protected runtime needs Cloudflare Worker **secret** bindings `PODCASTINDEX_API_KEY` and `PODCASTINDEX_API_SECRET`. Add those to the shared Worker’s Settings → Variables and Secrets, then deploy the shared gateway prepared in the main CoolCode repository. Adding repository secrets alone does not activate this static app. A missing-key response is shown as an actionable service error; it is not replaced with invented results.
 
-4. Replace the example in `web/` and its tests. Update the privacy explanation,
-   source attribution and README to describe the real tool.
-5. Test and preview:
+Contract, all read-only GET requests:
+
+| Route under `/api/podcastroute/` | Input | Upstream data |
+| --- | --- | --- |
+| `search` | `q` | Podcast Index `search/byterm`, `feeds` |
+| `episodes` | numeric `id` | `episodes/byfeedid`, `items`, max 100 and full descriptions |
+| `feed` | public `url` | `podcasts/byfeedurl`, `feed` |
+
+Success is `{ "fetched_at": "ISO timestamp", "data": { ...upstream JSON... } }`. Non-2xx failures use `{ "error": { "code": "...", "message": "..." } }`. The gateway must validate inputs, protect provider credentials, bound requests, cache provider responses appropriately and permit the CoolCode origin. The frontend never stores a credential.
+
+## Privacy
+
+Search queries, chosen feed IDs and imported RSS URLs are sent to the gateway and Podcast Index when requested. Loading cover art or playing audio contacts publisher hosts. Notes, playback positions, queue edits and workspace files stay in the browser; exporting uses a local download. Local persistence is opt-in under `coolcode:podcastroute:workspace:v1`. Other people using this browser profile can read a remembered workspace. Clear it using the app’s control. The shared CoolCode counter records aggregate tool opens independently of workspace contents.
+
+## Expand or customize
+
+Edit `web/config.json` to add arbitrary starter topics, for example append `"marine archaeology"` to `topics`. Visitors can search that subject immediately without a configuration change. `api_base` is the public gateway address, never a secret. `episode_limit` describes the backend’s 100-item limit and must stay synchronized with it; changing a frontend label cannot increase provider coverage. All filters/counts derive from returned records, not the starter topics.
+
+Run the checks below and push to `main`. GitHub’s **Browser tool · Check and publish** workflow builds and publishes after checks pass. There is no collection refresh to run: a new search/show request fetches current directory metadata. After changing routes, sources, coverage or catalogue metadata, follow the [CoolCode lifecycle](https://github.com/jsdyer/jsdyer.github.io/blob/main/docs/tool-lifecycle.md), sync this guide and `tool.json`, and verify hub, Worker and watchdog registrations. Existing watchdog logic needs no app-specific schedule; its generated target must include this tool.
+
+## Development and publication
 
 ```sh
 node --test tests/*.test.mjs
@@ -50,130 +53,6 @@ python3 scripts/build.py
 python3 -m http.server 8000 --directory dist
 ```
 
-Open `http://localhost:8000/`. The example trims lines, skips blanks and removes exact
-duplicates, preserving first-seen order and capitalization. It processes the text in tab memory. Update that explanation if your app behaves differently.
+No application dependencies or network access are needed to build. `dist/` is generated and untracked. For browser tests, install `tests/browser-requirements.txt`, then run `CHROMIUM_PATH=/path/to/google-chrome python3 tests/browser_smoke.py`; CI uses Ubuntu 24.04’s installed Google Chrome. Fixtures exercise the real gateway response shape without consuming provider quota.
 
-CI also tests the browser flow and mobile layout at a project subpath. Replace the
-sample assertions in `tests/browser_smoke.py` when implementing your own UI. To run
-that check locally (optional for ordinary preview):
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install -r tests/browser-requirements.txt
-python3 -m playwright install --with-deps chromium
-python3 tests/browser_smoke.py
-```
-
-Playwright is a test-only dependency; the app and its static build do not use it.
-
-## Expand or customize
-
-Every implemented tool should replace this section with its actual configuration
-path and a working example. A small `config.json` can hold default entities,
-query presets, source choices and request limits. Those defaults should be useful
-starting points, while visitors can enter other valid inputs whenever the source
-supports them. Keep provider limits explicit and separate from the starter list.
-
-Derive counts, filters and item validation from the current data. Do not require
-exactly the initial number of items. Add a test that expands the configuration,
-and keep historical captures readable when their coverage differs from today's
-watchlist. Display the selected capture date accurately.
-
-Document which changes need only a normal code push and which also need a data
-refresh. Include the refresh command or exact GitHub workflow and input, followed
-by the publication step. A successful code build need not mean a new collection
-has been fetched. The starter itself has no external collection or refresh.
-
-## Publish and register
-
-When the actual tool is ready, in the **new tool repository** set **Settings → Pages → Build and deployment →
-Source → GitHub Actions**. Push to `main`, or manually run **Browser tool · Check and
-publish** after enabling Pages. If the initial deployment ran before Pages was enabled,
-enable it and rerun. PRs only check/build and provide a downloadable preview artifact.
-
-Keep `{{VISIT_COUNTER}}` in the page head and `{{ISSUE_LINK}}` in the footer when replacing the starter UI. The build enables these for initialized CoolCode repositories. The shared counter records aggregate opens on coolcode.ca by public tool ID. Toolbox inputs and URL parameters are excluded. The issue link opens a reporting form with the tool already selected.
-
-Keep app-owned asset paths and module imports relative. Check `https://coolcode.ca/my-tool/`.
-Do not add a CNAME or set `coolcode.ca` as this project's custom domain; the account
-site supplies it. Only successful `main` builds deploy.
-
-After verifying the app, copy the reviewed object from `tool.json` into `data/tools.json`
-in [the main site](https://github.com/jsdyer/jsdyer.github.io). Each tool still builds
-independently. The hub generates the visitor Worker ID list, watchdog targets and sitemap; deploy and verify the affected services before considering the release complete. Update the hub record when listing metadata changes; the hub is the
-authority for discovery. Every change must follow the [mandatory lifecycle](https://github.com/jsdyer/jsdyer.github.io/blob/main/docs/tool-lifecycle.md). App-only changes may leave integrations unchanged, but this must be checked; documentation, source fields, schedules and registration changes also require the hub update.
-
-The main site separates **Use in your browser** from **Install yourself**. An app
-that asks for a file is still a browser tool. Standalone Linux packages should start
-in their own repositories with their own build/release workflow, rather than copying
-this browser-only scaffold. Their hub record uses `access: "install"`, links to an
-installation guide, and includes `requirements`.
-
-## Files
-
-| Path | Purpose |
-| --- | --- |
-| `tool.json` | Page metadata and a ready-to-copy catalogue record |
-| `web/` | HTML, responsive CSS, DOM interactions and separate model logic |
-| `scripts/build.py` | Escape metadata and build `web/` into `dist/` |
-| `scripts/init.py` | Set a new project's identity |
-| `scripts/add_schedule_guard.py` | Add an opt-in guard for explicitly selected scheduled collectors |
-| `tests/` | Application and builder tests |
-| `.github/workflows/pages.yml` | Check PRs and publish successful main builds |
-| `AGENTS.md` | Instructions for future coding work |
-
-Namespace optional storage as `coolcode:<tool-id>:<key>`; CoolCode paths share a
-browser origin. Don't save pasted text/uploads by default. Document external APIs
-and send only the information needed for the selected action. Never embed secrets.
-
-Scheduled refresh is opt-in. Validate source data before deploying, display its date,
-and preserve the last good deployment on failure. Public-repository schedules can
-stop after 60 days without repository activity.
-
-When adding a collector with `on.schedule`, also keep `workflow_dispatch` available
-for the independent Linux server scheduler. Generate a separate schedule guard,
-listing every scheduled collector in the repository:
-
-```sh
-python3 scripts/add_schedule_guard.py --repository jsdyer/my-tool .github/workflows/pages.yml
-```
-
-Replace the repository and workflow paths with the real values. Review the generated
-allowlist, commit `.github/workflows/schedule-guard.yml`, and verify its first push
-run. Re-run the command with the complete list when adding, renaming or removing a
-collector. The guard runs weekly, independently of collector failures, and calls
-GitHub's enable-workflow API for those paths and itself. It restores workflows
-disabled for inactivity and preserves manually disabled workflows. It does not
-fetch data, create dummy commits or change source/check timestamps.
-
-This is an interim mitigation: GitHub does not document active-workflow renewal as
-a permanent exemption, and scheduled runs can be delayed or dropped. Register the
-collector and its freshness expectations in the independent server scheduler too.
-Document its real data check, collection and publication steps in the tool README.
-The starter has no scheduled collector and therefore ships no recurring guard job.
-
-Templates don't propagate future edits automatically. Adopt fixes explicitly and
-consider a versioned reusable workflow once several tools confirm the shared process.
-Choose and add the intended software license before distributing a new project.
-
-## Search metadata
-
-Initialize the page title with a concise task phrase, while keeping the creative
-app name in `--title`:
-
-```sh
-python3 scripts/init.py line-cleaner --title "Line Cleaner" --description "Trim lines and remove exact duplicates in your browser." --search-title "Trim Lines & Remove Duplicates"
-```
-
-The build adds static `WebApplication` JSON-LD, a free CAD offer and social metadata.
-For initialized jsdyer tools it also adds the canonical CoolCode URL. Forks and the
-uninitialized template do not claim a CoolCode canonical. Review the application
-category in `scripts/build.py` when adapting the tool; the starter is a utility.
-Do not invent ratings or reviews. Search markup does not guarantee a rich result.
-
-For a saved public dataset, pass Dataset objects to `add_search_metadata` from the
-app builder, with actual source attribution, licence, coverage and download URLs.
-Derive counts and dates from the same snapshot used by the app and show those details
-on the page. Keep source edition, retrieval and page-build time distinct. Omit an
-unknown source modification date instead of setting it to the current build time.
-Read the hub's `docs/search-discovery.md` for the release checklist.
+Set repository **Settings → Pages → Source → GitHub Actions**. A successful main run publishes the project path; no CNAME is needed. Deploying the frontend and configuring the protected gateway are separate steps. Live API readiness must be checked after the Worker and secret bindings are deployed.
