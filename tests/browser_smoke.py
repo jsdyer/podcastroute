@@ -45,10 +45,20 @@ def main():
                 page.locator('#episodes').get_by_role('button', name='Add to queue').click()
                 assert page.locator('#queue-count').inner_text() == '1'
                 assert page.evaluate("localStorage.getItem('coolcode:podcastroute:workspace:v1')") is None
-                page.locator('#remember').check(); page.reload()
+                page.locator('#remember').check()
+                page.evaluate("const k='coolcode:podcastroute:workspace:v1'; const w=JSON.parse(localStorage.getItem(k)); w.progress['8']=300; localStorage.setItem(k,JSON.stringify(w));")
+                page.reload()
                 assert page.locator('#queue-count').inner_text() == '1'
                 page.locator('[data-tab="queue"]').click()
                 page.get_by_role('heading', name='A short planet story', exact=True).wait_for()
+                page.locator('#queue-list').get_by_role('button',name='Listen',exact=True).click()
+                page.evaluate("const a=document.getElementById('audio'); Object.defineProperty(a,'duration',{value:1200,configurable:true}); Object.defineProperty(a,'currentTime',{value:0,writable:true,configurable:true}); a.dispatchEvent(new Event('timeupdate'));")
+                assert page.evaluate("JSON.parse(localStorage.getItem('coolcode:podcastroute:workspace:v1')).progress['8']") == 300
+                page.evaluate("document.getElementById('audio').dispatchEvent(new Event('loadedmetadata'))")
+                assert page.locator('#audio').evaluate('(a)=>a.currentTime') == 300
+                page.locator('#mark-played').click()
+                page.evaluate("const a=document.getElementById('audio'); a.currentTime=400; a.dispatchEvent(new Event('timeupdate'));")
+                assert page.evaluate("JSON.parse(localStorage.getItem('coolcode:podcastroute:workspace:v1')).progress['8']") == 1200
                 with page.expect_download() as download:
                     page.locator('#export-json').click()
                 assert download.value.suggested_filename == 'podcast-route-workspace.json'

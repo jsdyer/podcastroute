@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {safeURL,httpsURL,normalizeFeed,normalizeEpisode,filteredFeeds,filteredEpisodes,durationLabel,addQueue,moveQueue,emptyWorkspace,validateWorkspace,exportOPML,MAX_QUEUE} from '../web/model.mjs';
+import {safeURL,httpsURL,normalizeFeed,normalizeEpisode,filteredFeeds,filteredEpisodes,durationLabel,addQueue,moveQueue,emptyWorkspace,validateWorkspace,exportOPML,MAX_QUEUE,serializedWorkspace,MAX_IMPORT_BYTES} from '../web/model.mjs';
 const feed=normalizeFeed({id:42,title:'A <b>show</b>',language:'en-CA',categories:{1:'Science'},url:'https://example.org/feed.xml'});
 const ep=normalizeEpisode({id:8,title:'Stars',enclosureUrl:'https://example.org/a.mp3',duration:1200,datePublished:1700000000,transcripts:[{url:'https://example.org/transcript',type:'text/plain'},{url:'javascript:bad()'}],chaptersUrl:'https://example.org/chapters'},feed);
 test('URL boundaries reject executable or credential-bearing links',()=>{assert.equal(safeURL('javascript:alert(1)'),'');assert.equal(safeURL('https://u:p@example.org'),'');assert.equal(httpsURL('http://example.org'),'');assert.equal(safeURL('https://example.org/a'),'https://example.org/a');});
@@ -14,5 +14,7 @@ test('workspace export roundtrip keeps links, notes and progress',()=>{const wor
 test('workspace rejects duplicate and malformed records',()=>{assert.throws(()=>validateWorkspace({version:9}));assert.throws(()=>validateWorkspace({...emptyWorkspace(),queue:[ep,ep]}));assert.throws(()=>validateWorkspace({...emptyWorkspace(),subscriptions:[{id:'evil'}]}));});
 test('workspace drops unsafe media and invalid progress',()=>{const value=validateWorkspace({...emptyWorkspace(),queue:[{...ep,audio:'javascript:x'}],progress:{8:-10,x:5},notes:{x:'x'}});assert.equal(value.queue[0].audio,'');assert.deepEqual(value.progress,{});assert.deepEqual(value.notes,{});});
 test('OPML escapes attribute injection',()=>{const value=exportOPML([{...feed,title:'A "quote" & <tag>'}]);assert.ok(value.includes('&quot;quote&quot; &amp; &lt;tag&gt;'));assert.ok(value.includes('xmlUrl="https://example.org/feed.xml"'));});
-test('duration label communicates missing metadata',()=>{assert.equal(durationLabel(0),'Duration not provided');assert.equal(durationLabel(3660),'1h 1m');});
+test('duration label communicates missing metadata',()=>{assert.equal(durationLabel(0),'Duration not provided');assert.equal(durationLabel(3660),'1h 1m');assert.equal(durationLabel(500*3600),'500h 0m');});
 test('configuration supports topics beyond initial defaults',()=>{const config=JSON.parse(fs.readFileSync(new URL('../web/config.json',import.meta.url)));const expanded=[...config.topics,'marine archaeology'];assert.equal(expanded.length,config.topics.length+1);assert.equal(expanded.at(-1),'marine archaeology');assert.ok(config.api_base.startsWith('https://'));});
+
+test('authoring and import share a byte budget so exports remain importable',()=>{const w={...emptyWorkspace(),notes:Object.fromEntries(Array.from({length:201},(_,i)=>[String(i+1),'x'.repeat(10000)]))};assert.throws(()=>serializedWorkspace(w),/2 MB/);assert.throws(()=>validateWorkspace(w),/2 MB/);const small={...emptyWorkspace(),queue:[ep],notes:{8:'😀'.repeat(1000)}};const data=serializedWorkspace(small);assert.ok(new TextEncoder().encode(data).length<=MAX_IMPORT_BYTES);assert.deepEqual(validateWorkspace(JSON.parse(data)),small);});

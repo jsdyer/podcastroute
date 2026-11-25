@@ -10,9 +10,9 @@ Search a subject or open an indexed RSS feed, then explore a show and filter its
 
 1. Search a topic such as “Canadian history” or a specific podcast title. The language field filters loaded directory matches (for example `en`, `en-CA` or `fr`).
 2. Open a show. Try a maximum duration of 30 minutes. Missing durations are kept only when the checkbox is selected. This filters the loaded episodes, not every episode ever published.
-3. Queue episodes or listen directly. Audio needs HTTPS and is supplied by the publisher; availability, seeking and browser playback vary. Resume restores the position captured when the episode was opened. Chapters and transcripts appear only when Podcast Index supplies publisher links.
+3. Queue episodes or listen directly. Audio needs HTTPS and is supplied by the publisher; availability, seeking and browser playback vary. The player restores the saved position after its metadata loads when the publisher supports seeking; the Resume control retries that position. Chapters and transcripts appear only when Podcast Index supplies publisher links.
 4. Follow shows. Following is a directory reference, not a background subscription or automatic download. Opening a show requests current indexed episodes.
-5. Choose “Remember this workspace” to persist locally. Otherwise changes live only in the current tab. Export a JSON backup before clearing browser data. Importing a workspace replaces its queue, subscriptions, notes and positions. OPML adds resolved subscriptions and retains existing ones; import at most 50 feed URLs per file.
+5. Choose “Remember this workspace” to persist locally. Otherwise changes live only in the current tab. Export a JSON backup before clearing browser data. A shared 2 MB serialized-workspace budget keeps every exported backup importable; edits exceeding it are rolled back with a visible message. Importing a workspace replaces its queue, subscriptions, notes and positions. OPML adds resolved subscriptions and retains existing ones; import at most 50 feed URLs per file.
 
 ## Sources and coverage
 
