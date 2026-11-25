@@ -37,6 +37,15 @@ def main():
                 assert any('q=marine+archaeology' in u for u in requests)
                 page.locator('#results').get_by_role('button', name='Follow', exact=True).click()
                 assert page.locator('#sub-count').inner_text() == '1'
+                assert page.locator('#save-state').inner_text() == 'Saved on this device'
+                page.reload()
+                assert page.locator('#sub-count').inner_text() == '1'
+                page.locator('[data-tab="subscriptions"]').click()
+                page.locator('#subscriptions-list').get_by_role('button',name='Unfollow',exact=True).click()
+                page.reload()
+                assert page.locator('#sub-count').inner_text() == '0'
+                page.locator('#query').fill('marine archaeology'); page.locator('#search-form button').click()
+                page.locator('#results').get_by_role('button',name='Follow',exact=True).click()
                 page.locator('#results').get_by_role('button', name='Explore episodes').click()
                 page.locator('#episodes .episode').nth(2).wait_for()
                 assert page.locator('#episodes img').count() == 0
@@ -44,8 +53,8 @@ def main():
                 assert page.locator('#episodes .episode').count() == 1
                 page.locator('#episodes').get_by_role('button', name='Add to queue').click()
                 assert page.locator('#queue-count').inner_text() == '1'
-                assert page.evaluate("localStorage.getItem('coolcode:podcastroute:workspace:v1')") is None
-                page.locator('#remember').check()
+                assert json.loads(page.evaluate("localStorage.getItem('coolcode:podcastroute:workspace:v1')"))['queue'][0]['id'] == '8'
+                assert page.locator('#remember').is_checked()
                 page.evaluate("const k='coolcode:podcastroute:workspace:v1'; const w=JSON.parse(localStorage.getItem(k)); w.progress['8']=300; localStorage.setItem(k,JSON.stringify(w));")
                 page.reload()
                 assert page.locator('#queue-count').inner_text() == '1'
@@ -66,10 +75,44 @@ def main():
                 page.set_viewport_size({'width':390,'height':844})
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
                 page.screenshot(path=str(screenshots / 'mobile.png'), full_page=True)
+                # A second clean tab receives followed-show changes without resurrecting old data.
+                other=page.context.new_page()
+                other.route('https://coolcode-visitor-api.jeffdyer.workers.dev/api/podcastroute/**',gateway)
+                other.goto(f'http://127.0.0.1:{server.server_port}/podcastroute/')
+                other.locator('[data-tab="subscriptions"]').click()
+                other.locator('#subscriptions-list').get_by_role('button',name='Unfollow',exact=True).click()
+                page.wait_for_function("document.getElementById('sub-count').textContent === '0'")
+                other.close()
                 page.locator('#remember').uncheck()
                 assert page.evaluate("localStorage.getItem('coolcode:podcastroute:workspace:v1')") is None
+                page.reload()
+                assert not page.locator('#remember').is_checked()
+                assert 'This tab only' in page.locator('#save-state').inner_text()
+                assert page.locator('#queue-count').inner_text() == '0'
+                # Validated imports discard executable URL fields and untrusted HTML.
+                malicious={'version':1,'queue':[{'id':'77','title':'<img src=x onerror=alert(1)>Safe episode','audio':'javascript:alert(1)','link':'data:text/html,bad','notes':[]}],'subscriptions':[],'progress':{},'notes':{}}
+                page.locator('#import-json').set_input_files({'name':'workspace.json','mimeType':'application/json','buffer':json.dumps(malicious).encode()})
+                page.wait_for_function("document.getElementById('queue-count').textContent === '1'")
+                page.locator('[data-tab="queue"]').click()
+                assert page.locator('#queue-list img').count() == 0
+                assert page.locator('#queue-list a').count() == 0
+                assert 'Safe episode' in page.locator('#queue-list').inner_text()
+                assert page.evaluate("localStorage.getItem('coolcode:podcastroute:workspace:v1')") is None
+                # A quota/blocked-storage failure must preserve this tab and say it is not saved.
+                failure_context=browser.new_context()
+                failure_context.add_init_script("const original=Storage.prototype.setItem; Storage.prototype.setItem=function(k,v){if(k==='coolcode:podcastroute:workspace:v1')throw new DOMException('Storage full','QuotaExceededError');return original.call(this,k,v);};")
+                failure=failure_context.new_page();failure.on('pageerror',lambda e:errors.append(str(e)))
+                failure.route('https://coolcode-visitor-api.jeffdyer.workers.dev/api/podcastroute/**',gateway)
+                failure.goto(f'http://127.0.0.1:{server.server_port}/podcastroute/')
+                failure.locator('#query').fill('science');failure.locator('#search-form button').click()
+                failure.locator('#results').get_by_role('button',name='Follow',exact=True).click()
+                assert failure.locator('#sub-count').inner_text() == '1'
+                assert 'Not saved' in failure.locator('#save-state').inner_text()
+                assert failure.locator('#export-recovery').is_visible()
+                assert failure.evaluate("localStorage.getItem('coolcode:podcastroute:workspace:v1')") is None
+                failure_context.close()
                 assert not errors, errors
                 browser.close()
-            print('Browser checks passed: arbitrary topic, filters, queue, subscriptions, opt-in persistence, export and mobile layout')
+            print('Browser checks passed: arbitrary topic, filters, queue, subscriptions, automatic follow/unfollow persistence, storage failures, cross-tab updates, safe imports, export and mobile layout')
         finally: server.shutdown()
 if __name__ == '__main__': main()

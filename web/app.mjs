@@ -1,8 +1,42 @@
+import {WorkspaceStore,SAVE_MODE_KEY} from './storage.mjs';
 import {STORAGE_KEY,MAX_IMPORT_BYTES,text,safeURL,httpsURL,normalizeFeed,normalizeEpisode,filteredFeeds,filteredEpisodes,durationLabel,dateLabel,addQueue,moveQueue,emptyWorkspace,validateWorkspace,exportOPML,serializedWorkspace} from './model.mjs';
 const $=id=>document.getElementById(id), el=(tag,content,cls)=>{const n=document.createElement(tag);if(content!==undefined)n.textContent=content;if(cls)n.className=cls;return n;};
+const deviceStore=new WorkspaceStore({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value),removeItem:key=>localStorage.removeItem(key)});
 let config,workspace=emptyWorkspace(),feeds=[],episodes=[],selectedFeed=null,currentEpisode=null,searchSequence=0,episodeSequence=0,lastSave=0,resumePosition=0,pendingResume=false,trackProgress=true,workspaceSnapshot=JSON.stringify(workspace);
 function status(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
-function save(){let serialized;try{serialized=serializedWorkspace(workspace);}catch(error){workspace=JSON.parse(workspaceSnapshot);renderQueue();renderSubscriptions();renderFeeds();renderEpisodes();updateCounters();if(currentEpisode)$('notes').value=workspace.notes[currentEpisode.id]||'';status(error.message,true);return false;}workspaceSnapshot=serialized;if($('remember').checked){try{localStorage.setItem(STORAGE_KEY,serialized);}catch{status('This device could not save your workspace. Export it to keep a copy.',true);}}return true;}
+function storageStatus(){
+  const states={
+    saved:['Saved on this device','Your follows, queue, notes and progress will return in this browser. No cookies or account needed.'],
+    ready:['Automatic saving is on','Follows, queue, notes and progress will be saved in this browser on this device.'],
+    tab:['This tab only — saving is off','Changes will be lost when this tab closes or reloads. Export a backup to keep them.'],
+    unavailable:['Not saved — browser storage is unavailable','Keep this tab open and export a backup. Private browsing or browser settings may prevent saving; an earlier saved copy may still exist.'],
+    invalid:['Not saved — the device copy could not be read','It has not been overwritten. Open a valid backup, or explicitly replace it with this tab’s copy.'],
+    conflict:['Not saved — another tab changed this workspace','Your current work is still here. Export it before loading the saved copy, or explicitly replace the saved copy with this tab’s work.']
+  };
+  const [title,detail]=states[deviceStore.state];
+  $('save-state').textContent=title;$('save-detail').textContent=detail;
+  const issue=['unavailable','invalid','conflict'].includes(deviceStore.state);
+  $('save-state').classList.toggle('error',issue);
+  $('storage-actions').hidden=!issue;
+  $('reload-saved').hidden=deviceStore.state==='unavailable';
+  $('replace-saved').hidden=!deviceStore.enabled;
+  $('remember').checked=deviceStore.enabled;
+}
+function renderWorkspace(){renderQueue();renderSubscriptions();renderFeeds();renderEpisodes();updateCounters();}
+function save(){
+  let serialized;
+  try{serialized=serializedWorkspace(workspace);}catch(error){
+    workspace=JSON.parse(workspaceSnapshot);renderWorkspace();
+    if(currentEpisode)$('notes').value=workspace.notes[currentEpisode.id]||'';
+    status(error.message,true);return false;
+  }
+  workspaceSnapshot=serialized;
+  deviceStore.save(workspace);
+  storageStatus();
+  return true;
+}
+function stopPlayer(){currentEpisode=null;$('audio').pause();$('audio').removeAttribute('src');$('player-panel').hidden=true;}
+function openWorkspace(next,{keepPlayer=false}={}){if(!keepPlayer)stopPlayer();workspace=next;workspaceSnapshot=serializedWorkspace(workspace);if(keepPlayer&&currentEpisode)$('notes').value=workspace.notes[currentEpisode.id]||'';renderWorkspace();}
 function button(label,fn,cls=''){const b=el('button',label,cls);b.type='button';b.addEventListener('click',fn);return b;}
 function link(label,url){const a=el('a',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
 function empty(container,title,detail){const d=el('div',undefined,'empty');d.append(el('h3',title),el('p',detail));container.replaceChildren(d);}
@@ -26,8 +60,45 @@ function download(name,body,type){const url=URL.createObjectURL(new Blob([body],
 async function readFile(file){if(!file)throw Error('Choose a file.');if(file.size>MAX_IMPORT_BYTES)throw Error('Choose a file smaller than 2 MB.');return file.text();}
 $('search-form').addEventListener('submit',e=>{e.preventDefault();const q=$('query').value.trim();if(q)search(q);});$('feed-form').addEventListener('submit',async e=>{e.preventDefault();try{status('Looking up the RSS feed…');const feed=await resolveFeed($('feed-url').value);feeds=[feed];renderFeeds();await openShow(feed);}catch(error){status(error.message,true);}});
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));$('language').addEventListener('input',renderFeeds);['episode-query','min-minutes','max-minutes','include-unknown'].forEach(id=>$(id).addEventListener('input',renderEpisodes));$('close-show').addEventListener('click',()=>{$('episodes-panel').hidden=true;++episodeSequence;});
-$('audio').addEventListener('loadedmetadata',()=>{if(!currentEpisode)return;try{if(resumePosition>0)$('audio').currentTime=Math.min(resumePosition,Number.isFinite($('audio').duration)?$('audio').duration:resumePosition);}catch{$('playback-status').textContent='This publisher may not support seeking. Try the Resume control once playback starts.';}pendingResume=false;});$('audio').addEventListener('play',()=>{trackProgress=true;});$('audio').addEventListener('timeupdate',()=>{if(currentEpisode&&!pendingResume&&trackProgress&&Number.isFinite($('audio').currentTime)){workspace.progress[currentEpisode.id]=$('audio').currentTime;if(Date.now()-lastSave>5000){save();lastSave=Date.now();}}});$('audio').addEventListener('pause',save);$('audio').addEventListener('error',()=>{$('playback-status').textContent='The publisher’s audio could not be played here. Try its episode page; your saved position and notes are retained.';});$('resume').addEventListener('click',()=>{if(!currentEpisode)return;const target=resumePosition;if($('audio').readyState<1){$('playback-status').textContent='Start the player, then resume after its duration loads.';return;}$('audio').currentTime=Math.min(target,Number.isFinite($('audio').duration)?$('audio').duration:target);$('audio').play().catch(()=>{});});$('mark-played').addEventListener('click',()=>{if(!currentEpisode)return;const seconds=Number.isFinite($('audio').duration)?$('audio').duration:currentEpisode.duration;if(!seconds)return status('The episode duration is not known yet.',true);$('audio').pause();trackProgress=false;workspace.progress[currentEpisode.id]=seconds;resumePosition=seconds;if(!save())return;renderQueue();status('Saved the end position for this episode.');});$('notes').addEventListener('input',()=>{if(currentEpisode){workspace.notes[currentEpisode.id]=$('notes').value;save();}});
-$('remember').addEventListener('change',()=>{if($('remember').checked){save();status('This workspace will be remembered on this device.');}else{try{localStorage.removeItem(STORAGE_KEY);}catch{status('Device storage is unavailable.',true);}status('Saved device copy removed. Your current tab still has the workspace.');}});$('export-json').addEventListener('click',()=>download('podcast-route-workspace.json',serializedWorkspace(workspace),'application/json'));$('import-json').addEventListener('change',async e=>{try{const next=validateWorkspace(JSON.parse(await readFile(e.target.files[0])));$('audio').pause();currentEpisode=null;$('audio').removeAttribute('src');$('player-panel').hidden=true;workspace=next;save();renderQueue();renderSubscriptions();renderFeeds();updateCounters();status('Opened the workspace. Current queue and subscriptions were replaced.');}catch(error){status(error.message,true);}finally{e.target.value='';}});$('clear-workspace').addEventListener('click',()=>{if(!confirm('Clear this workspace, including saved notes and listening positions?'))return;$('audio').pause();$('audio').removeAttribute('src');currentEpisode=null;$('player-panel').hidden=true;workspace=emptyWorkspace();try{localStorage.removeItem(STORAGE_KEY);}catch{status('Device storage is unavailable.',true);}$('remember').checked=false;renderQueue();renderSubscriptions();renderFeeds();renderEpisodes();updateCounters();status('Workspace cleared from this tab and this device.');});$('export-opml').addEventListener('click',()=>download('podcast-route-subscriptions.opml',exportOPML(workspace.subscriptions),'text/xml'));
+$('audio').addEventListener('loadedmetadata',()=>{if(!currentEpisode)return;try{if(resumePosition>0)$('audio').currentTime=Math.min(resumePosition,Number.isFinite($('audio').duration)?$('audio').duration:resumePosition);}catch{$('playback-status').textContent='This publisher may not support seeking. Try the Resume control once playback starts.';}pendingResume=false;});$('audio').addEventListener('play',()=>{trackProgress=true;});$('audio').addEventListener('timeupdate',()=>{if(currentEpisode&&!pendingResume&&trackProgress&&Number.isFinite($('audio').currentTime)){workspace.progress[currentEpisode.id]=$('audio').currentTime;if(Date.now()-lastSave>5000){save();lastSave=Date.now();}}});$('audio').addEventListener('pause',()=>{if(currentEpisode)save();});$('audio').addEventListener('error',()=>{$('playback-status').textContent='The publisher’s audio could not be played here. Try its episode page; your saved position and notes are retained.';});$('resume').addEventListener('click',()=>{if(!currentEpisode)return;const target=resumePosition;if($('audio').readyState<1){$('playback-status').textContent='Start the player, then resume after its duration loads.';return;}$('audio').currentTime=Math.min(target,Number.isFinite($('audio').duration)?$('audio').duration:target);$('audio').play().catch(()=>{});});$('mark-played').addEventListener('click',()=>{if(!currentEpisode)return;const seconds=Number.isFinite($('audio').duration)?$('audio').duration:currentEpisode.duration;if(!seconds)return status('The episode duration is not known yet.',true);$('audio').pause();trackProgress=false;workspace.progress[currentEpisode.id]=seconds;resumePosition=seconds;if(!save())return;renderQueue();status('Saved the end position for this episode.');});$('notes').addEventListener('input',()=>{if(currentEpisode){workspace.notes[currentEpisode.id]=$('notes').value;save();}});
+$('remember').addEventListener('change',()=>{
+  const enabled=$('remember').checked;
+  const changed=deviceStore.setEnabled(enabled);
+  if(enabled&&changed)save();else storageStatus();
+  if(changed)status(enabled?'Automatic saving is on.':'Device saving is off and its remembered copy was removed. Your current tab still has the workspace.');
+});
+function exportWorkspace(){download('podcast-route-workspace.json',serializedWorkspace(workspace),'application/json');}
+$('export-json').addEventListener('click',exportWorkspace);
+$('export-recovery').addEventListener('click',exportWorkspace);
+$('reload-saved').addEventListener('click',()=>{
+  if(!confirm('Load the saved device copy and replace this tab’s current work? Export this tab first if you need both.'))return;
+  const next=deviceStore.read();
+  if(!['invalid','unavailable'].includes(deviceStore.state)){openWorkspace(next);status('Loaded the saved device copy.');}
+  storageStatus();
+});
+$('replace-saved').addEventListener('click',()=>{
+  if(!confirm('Replace the saved device copy with this tab’s work? Other tabs will receive this change.'))return;
+  deviceStore.save(workspace,{replace:true});storageStatus();
+});
+$('import-json').addEventListener('change',async e=>{
+  try{const next=validateWorkspace(JSON.parse(await readFile(e.target.files[0])));openWorkspace(next);save();status('Opened the workspace. Current queue and subscriptions were replaced.');}
+  catch(error){status(error.message,true);}finally{e.target.value='';}
+});
+$('clear-workspace').addEventListener('click',()=>{
+  if(!confirm('Clear this workspace, including saved follows, queue, notes and listening positions?'))return;
+  openWorkspace(emptyWorkspace());const cleared=deviceStore.clear();storageStatus();
+  status(cleared?'Workspace cleared from this tab and this device.':"This tab was cleared, but the browser did not let us remove the saved device copy.",!cleared);
+});
+$('export-opml').addEventListener('click',()=>download('podcast-route-subscriptions.opml',exportOPML(workspace.subscriptions),'text/xml'));
+window.addEventListener('storage',event=>{
+  if(event.key===SAVE_MODE_KEY){deviceStore.enabled=event.newValue!=='tab';if(!deviceStore.enabled)deviceStore.state='tab';storageStatus();return;}
+  if(event.key!==STORAGE_KEY&&event.key!==null)return;
+  const next=deviceStore.observe(event.key===null?null:event.newValue,workspace);
+  if(next){openWorkspace(next,{keepPlayer:event.newValue!==null});status('Workspace updated from another tab on this device.');}
+  storageStatus();
+});
+window.addEventListener('pagehide',()=>{if(serializedWorkspace(workspace)!==deviceStore.snapshot)save();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&serializedWorkspace(workspace)!==deviceStore.snapshot)save();});
 $('import-opml').addEventListener('change',async e=>{try{const raw=await readFile(e.target.files[0]);if(/<!DOCTYPE|<!ENTITY/i.test(raw))throw Error('OPML containing document types or entities is not supported.');const doc=new DOMParser().parseFromString(raw,'application/xml');if(doc.querySelector('parsererror')||doc.documentElement.localName!=='opml')throw Error('Choose a valid OPML subscription file.');const urls=[...new Set([...doc.querySelectorAll('outline[xmlUrl]')].map(n=>safeURL(n.getAttribute('xmlUrl'))).filter(Boolean))];if(!urls.length||urls.length>50)throw Error('Import between 1 and 50 public feed URLs at a time.');let added=0,failed=0;for(let i=0;i<urls.length;i++){status(`Resolving feed ${i+1} of ${urls.length}…`);try{const feed=await resolveFeed(urls[i]);if(!workspace.subscriptions.some(f=>f.id===feed.id)&&workspace.subscriptions.length<500){workspace.subscriptions.push(feed);added++;}}catch{failed++;}}if(!save())return;renderSubscriptions();updateCounters();showTab('subscriptions');status(`Imported ${added} subscriptions.${failed?` ${failed} feeds could not be resolved; existing subscriptions were kept.`:''}`,failed>0);}catch(error){status(error.message,true);}finally{e.target.value='';}});
-try{const stored=localStorage.getItem(STORAGE_KEY);if(stored){workspace=validateWorkspace(JSON.parse(stored));workspaceSnapshot=serializedWorkspace(workspace);$('remember').checked=true;}}catch{status('A saved workspace could not be read. You can open a backup JSON file.',true);}renderQueue();renderSubscriptions();updateCounters();
+workspace=deviceStore.read();workspaceSnapshot=serializedWorkspace(workspace);storageStatus();renderWorkspace();
 try{const response=await fetch('./config.json');if(!response.ok)throw Error('Configuration is unavailable.');config=await response.json();if(!httpsURL(config.api_base)||!Array.isArray(config.topics))throw Error('The public API configuration is invalid.');$('topics').replaceChildren(...config.topics.map(topic=>button(text(topic,100),()=>{$('query').value=topic;search(topic);})));}catch(error){status(error.message,true);}

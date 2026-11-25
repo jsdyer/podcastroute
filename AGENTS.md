@@ -17,8 +17,10 @@
   CNAME or claim the hub's domain. Link home to `https://coolcode.ca/`.
 - Keep transformations separate from DOM code. Render untrusted input through
   textContent/value, not innerHTML. Never embed API secrets.
-- State which inputs leave the browser. Do not retain pasted text or uploads by
-  default. Namespace preferences as `coolcode:<tool-id>:<key>`; paths share storage.
+- State which inputs leave the browser. Podcast Route deliberately saves follows,
+  queue, notes and positions on this device by default, as requested by the owner;
+  keep the visible storage status, tab-only option and failure handling. Do not save
+  search terms or raw uploaded files. Namespace preferences as `coolcode:<tool-id>:<key>`; paths share storage.
 - Run `node --test tests/*.test.mjs`, `python3 -m unittest discover -s tests -v`,
   and `python3 scripts/build.py`. Preview `dist/` using a local HTTP server.
 - Update `tests/browser_smoke.py` when replacing the sample UI. CI runs it with

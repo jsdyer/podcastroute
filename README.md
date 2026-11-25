@@ -3,7 +3,7 @@
 Find podcasts by any subject, show or presenter, choose episodes by listening time, and keep a private listening queue. Use [Podcast Route](https://coolcode.ca/podcastroute/).
 
 <!-- coolcode:guide -->
-Search a subject or open an indexed RSS feed, then explore a show and filter its latest 100 indexed episodes by keywords, language at show level, and duration. Unknown durations are explicitly included or excluded. Follow shows, import/export subscriptions as OPML, and save a queue with notes and listening positions on your device; publisher audio and available chapter/transcript links remain on their original hosts.
+Search a subject or open an indexed RSS feed, then explore a show and filter its latest 100 indexed episodes by keywords, language at show level, and duration. Unknown durations are explicitly included or excluded. Follow shows, import/export subscriptions as OPML, and keep a queue with notes and listening positions automatically saved in this browser on your device; publisher audio and available chapter/transcript links remain on their original hosts.
 <!-- /coolcode:guide -->
 
 ## Use it
@@ -12,7 +12,7 @@ Search a subject or open an indexed RSS feed, then explore a show and filter its
 2. Open a show. Try a maximum duration of 30 minutes. Missing durations are kept only when the checkbox is selected. This filters the loaded episodes, not every episode ever published.
 3. Queue episodes or listen directly. Audio needs HTTPS and is supplied by the publisher; availability, seeking and browser playback vary. The player restores the saved position after its metadata loads when the publisher supports seeking; the Resume control retries that position. Chapters and transcripts appear only when Podcast Index supplies publisher links.
 4. Follow shows. Following is a directory reference, not a background subscription or automatic download. Opening a show requests current indexed episodes.
-5. Choose “Remember this workspace” to persist locally. Otherwise changes live only in the current tab. Export a JSON backup before clearing browser data. A shared 2 MB serialized-workspace budget keeps every exported backup importable; edits exceeding it are rolled back with a visible message. Importing a workspace replaces its queue, subscriptions, notes and positions. OPML adds resolved subscriptions and retains existing ones; import at most 50 feed URLs per file.
+5. Follows, queue, notes and playback positions save automatically on this device. Look for **Saved on this device** above the search controls; refresh or reopen this same browser to restore them. Cookies and accounts are not needed. Turn off **Save this workspace automatically on this device** for a temporary tab; this removes the remembered copy and keeps that choice for future visits. Export a JSON backup before clearing browser data or changing devices. A shared 2 MB serialized-workspace budget keeps every exported backup importable; edits exceeding it are rolled back with a visible message. Importing a workspace replaces its queue, subscriptions, notes and positions. OPML adds resolved subscriptions and retains existing ones; import at most 50 feed URLs per file.
 
 ## Sources and coverage
 
@@ -36,7 +36,11 @@ Success is `{ "fetched_at": "ISO timestamp", "data": { ...upstream JSON... } }`.
 
 ## Privacy
 
-Search queries, chosen feed IDs and imported RSS URLs are sent to the gateway and Podcast Index when requested. Loading cover art or playing audio contacts publisher hosts. Notes, playback positions, queue edits and workspace files stay in the browser; exporting uses a local download. Local persistence is opt-in under `coolcode:podcastroute:workspace:v1`. Other people using this browser profile can read a remembered workspace. Clear it using the app’s control. The shared CoolCode counter records aggregate tool opens independently of workspace contents.
+Search queries, chosen feed IDs and imported RSS URLs are sent to the gateway and Podcast Index when requested. Loading cover art or playing audio contacts publisher hosts. Notes, playback positions, queue edits and workspace files stay in the browser; exporting uses a local download. Local persistence is enabled by default under `coolcode:podcastroute:workspace:v1`; the optional temporary-tab preference uses `coolcode:podcastroute:save-mode:v1`. Search terms and raw uploaded files are not saved. Other people using this browser profile can read a remembered workspace. Clear it using the app’s control. Private browsing, blocked/full browser storage, or clearing site data may prevent or remove persistence; the visible storage indicator reports failures instead of claiming a save. **Export workspace** keeps a portable backup. Nothing is synchronized to a server or another device.
+
+Other tabs receive device updates when they have no unsaved edits. If another tab changes the saved copy while this tab has pending work, automatic saving pauses and displays recovery controls: export this tab, load the saved copy, or explicitly replace the saved copy. A malformed saved record is preserved until an explicit replacement or clear. The app also checks the saved baseline before a write, protecting against stale saves before a storage event arrives.
+
+The shared CoolCode counter records aggregate tool opens independently of workspace contents.
 
 ## Expand or customize
 
