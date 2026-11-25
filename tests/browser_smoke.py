@@ -23,7 +23,8 @@ def main():
             with sync_playwright() as p:
                 opts = {'executable_path': os.environ['CHROMIUM_PATH']} if os.environ.get('CHROMIUM_PATH') else {}
                 browser = p.chromium.launch(**opts)
-                page = browser.new_page(viewport={'width': 1280, 'height': 1000}); errors = []; requests=[]
+                context = browser.new_context(viewport={'width': 1280, 'height': 1000})
+                page = context.new_page(); errors = []; requests=[]
                 page.on('pageerror', lambda e: errors.append(str(e)))
                 def gateway(route):
                     url=route.request.url; requests.append(url)
